@@ -1,45 +1,57 @@
 # 网站监控工具
 
-实时监控网站可用性，通过 AI API 检测 HTTP 状态码，自动定时轮询。
+服务端持续监控网站可用性，无需保持页面开启。通过 Railway Cron 定时检测，结果存储在 Upstash Redis。
 
-## 功能
+## 部署步骤
 
-- 添加/移除监控网站
-- 通过 AI API 真实检测 HTTP 状态码（区分 200/301/4xx/5xx）
-- 可选检测间隔：15分钟 / 30分钟 / 1小时 / 2小时 / 3小时 / 6小时
-- 每个网站最近 10 次历史记录（彩色圆点）
-- 悬停圆点查看详细时间和状态码
-- 设置持久化（localStorage）
+### 1. 创建 Upstash Redis 数据库
+1. 前往 [upstash.com](https://upstash.com) → Create Database → Redis
+2. 复制以下两个值（注意 URL 必须是 https:// 开头）：
+   - `KV_REST_API_URL` → 这是 `UPSTASH_REDIS_REST_URL`
+   - `KV_REST_API_TOKEN` → 这是 `UPSTASH_REDIS_REST_TOKEN`
 
-## 本地运行
+### 2. 上传代码到 GitHub
+Fork 或直接上传本项目到你的 GitHub 仓库。
 
-```bash
-npm install
-npm run dev
+### 3. 在 Railway 部署
+1. 登录 [railway.app](https://railway.app)
+2. New Project → Deploy from GitHub Repo → 选择本仓库
+3. 在 Variables 里添加以下环境变量：
+
+```
+UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
+UPSTASH_REDIS_REST_TOKEN=AXxxxxxxxxxxxxxxxx
+CRON_SECRET=任意一段随机字符串（用于保护 Cron 接口）
 ```
 
-访问 http://localhost:3000
+4. 部署完成后，记录你的 Railway 域名，如 `https://your-app.railway.app`
 
-## 部署到 Railway
+### 4. 设置 Railway Cron
+1. 在 Railway 项目里点 **+ New** → **Cron Job**
+2. Schedule 填写（例如每 30 分钟）：`*/30 * * * *`
+3. Command 填写：
+```
+curl -s -H "Authorization: Bearer 你的CRON_SECRET" https://your-app.railway.app/api/cron
+```
 
-1. Fork 或 clone 本仓库到你的 GitHub
-2. 登录 [railway.app](https://railway.app)
-3. New Project → Deploy from GitHub Repo → 选择本仓库
-4. 无需任何环境变量，直接部署
-5. 部署完成后访问分配的域名
+### 5. 打开页面配置
+访问你的 Railway 域名 → 点「设置」→ 填写：
+- API Base URL
+- 登录码（API Key）
+- 模型
+- 企业微信 Webhook（选填）
 
-## 使用说明
+## Cron 时间表参考
 
-1. 打开网站后点右上角「⚙ 设置」
-2. 填写：
-   - API Base URL（如 `https://ai.liaobots.work/v1`）
-   - 登录码（你的 API Key）
-   - 模型（如 `gpt-4o`）
-3. 保存后回到主页，输入要监控的网址添加
-4. 系统立即检测一次，之后按选定间隔自动检测
+| 间隔 | Schedule |
+|------|----------|
+| 15 分钟 | `*/15 * * * *` |
+| 30 分钟 | `*/30 * * * *` |
+| 1 小时 | `0 * * * *` |
+| 2 小时 | `0 */2 * * *` |
+| 6 小时 | `0 */6 * * *` |
 
 ## 技术栈
-
-- Next.js 14
-- 后端 API 路由中转请求（避免浏览器 CORS 限制）
-- 无数据库（数据存储在浏览器 localStorage）
+- Next.js 14 + Railway
+- Upstash Redis（存储网站列表、配置、检测历史）
+- Railway Cron（定时触发检测，服务端运行，无需开页面）
