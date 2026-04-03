@@ -1,19 +1,88 @@
-* {
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #f5f5f5;
-  color: #111;
-  min-height: 100vh;
+:root {
+  --bg: #f9f7f4;
+  --surface: #ffffff;
+  --surface-hover: #faf9f7;
+  --border: rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.14);
+  --text-primary: #1a1915;
+  --text-secondary: #6b6860;
+  --text-muted: #a09e9a;
+  --ok: #2d6a4f;
+  --ok-bg: #f0f7f3;
+  --ok-dot: #40916c;
+  --err: #9b2335;
+  --err-bg: #fdf2f3;
+  --err-dot: #c13b4e;
+  --checking: #1a5fa8;
+  --checking-bg: #f0f5fc;
+  --accent: #1a1915;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --font-sans: 'Söhne', ui-sans-serif, -apple-system, 'Helvetica Neue', sans-serif;
+  --font-mono: 'Söhne Mono', ui-monospace, 'SF Mono', monospace;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.06);
 }
 
 @media (prefers-color-scheme: dark) {
-  body {
-    background: #0f0f0f;
-    color: #f0f0f0;
+  :root {
+    --bg: #1a1915;
+    --surface: #232118;
+    --surface-hover: #2a271f;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --text-primary: #f0ede8;
+    --text-secondary: #9b9790;
+    --text-muted: #6b6860;
+    --ok: #52b788;
+    --ok-bg: #0d2b1e;
+    --ok-dot: #52b788;
+    --err: #e07080;
+    --err-bg: #2b0d12;
+    --err-dot: #e07080;
+    --checking: #6fa8dc;
+    --checking-bg: #0d1f35;
+    --accent: #f0ede8;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
   }
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(155,35,53,0.3); }
+  70% { box-shadow: 0 0 0 6px rgba(155,35,53,0); }
+  100% { box-shadow: 0 0 0 0 rgba(155,35,53,0); }
 }
