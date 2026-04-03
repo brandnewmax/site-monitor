@@ -7,7 +7,7 @@ async function sendWechatAlert(webhookUrl, siteUrl, statusCode, note) {
     msgtype: 'markdown',
     markdown: {
       content: [
-        '## 🔴 网站异常告警',
+        '## 【慢慢来网站监控】异常告警',
         `**网站**：${siteUrl}`,
         `**状态**：${codeText}`,
         `**详情**：${note || '未知错误'}`,
