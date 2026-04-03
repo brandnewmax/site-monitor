@@ -156,6 +156,12 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: 80 }}>
+      <style>{`
+        .add-input::placeholder { color: rgba(255,255,255,0.6); }
+        .add-input:focus::placeholder { color: var(--text-muted); }
+        .add-input { color: white; }
+        .add-input:focus { color: var(--text-primary) !important; }
+      `}</style>
 
       {/* Header */}
       <header style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface)', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -236,7 +242,8 @@ export default function Home() {
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder="添加网站地址，如 example.com"
-              style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: inputFocused ? 'var(--text-primary)' : 'white', padding: '10px 0', fontFamily: 'var(--font-sans)' }}
+              className="add-input"
+              style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 14, padding: '10px 0', fontFamily: 'var(--font-sans)' }}
             />
             <button
               onClick={addSite}
