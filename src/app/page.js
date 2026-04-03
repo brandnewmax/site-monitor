@@ -17,7 +17,7 @@ function formatTime(ts) {
 
 export default function Home() {
   const [sites, setSites] = useState([])
-  const [config, setConfig] = useState({ baseUrl: '', model: '', webhookUrl: '', hasApiKey: false })
+  const [config, setConfig] = useState({ webhookUrl: '', hasApiKey: false })
   const [urlInput, setUrlInput] = useState('')
   const [inputFocused, setInputFocused] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -26,9 +26,6 @@ export default function Home() {
   const [checkingUrls, setCheckingUrls] = useState(new Set())
 
   // Form state (separate so we don't mutate config until save)
-  const [formBaseUrl, setFormBaseUrl] = useState('')
-  const [formApiKey, setFormApiKey] = useState('')
-  const [formModel, setFormModel] = useState('')
   const [formWebhook, setFormWebhook] = useState('')
 
   const fetchSites = useCallback(async () => {
@@ -44,8 +41,6 @@ export default function Home() {
       const res = await fetch('/api/config')
       const data = await res.json()
       setConfig(data)
-      setFormBaseUrl(data.baseUrl || '')
-      setFormModel(data.model || '')
       setFormWebhook(data.webhookUrl || '')
     } catch {}
   }, [])
@@ -125,9 +120,6 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          baseUrl: formBaseUrl,
-          apiKey: formApiKey || undefined,
-          model: formModel,
           webhookUrl: formWebhook,
         }),
       })
@@ -253,16 +245,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* No API key warning */}
-        {!config.hasApiKey && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', marginBottom: 12 }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#b45309" strokeWidth="1.4" style={{ flexShrink: 0 }}>
-              <circle cx="7" cy="7" r="5.5"/><path d="M7 4.5v3M7 9.5v.5" strokeLinecap="round"/>
-            </svg>
-            <span style={{ fontSize: 13, color: '#92400e' }}>请先在「设置」中填写 API 配置</span>
-            <button onClick={() => setShowSettings(true)} style={{ marginLeft: 'auto', fontSize: 12, color: '#92400e', background: 'none', border: '1px solid #d97706', borderRadius: 'var(--radius-sm)', padding: '2px 8px', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>去配置</button>
-          </div>
-        )}
+
 
         {/* Site list */}
         {sites.length === 0 ? (
@@ -296,28 +279,21 @@ export default function Home() {
               </button>
             </div>
 
-            {[
-              { label: 'API Base URL', val: formBaseUrl, set: setFormBaseUrl, ph: 'https://ai.liaobots.work/v1', type: 'text' },
-              { label: `登录码（API Key）${config.hasApiKey ? ' · 已配置，留空则不更新' : ''}`, val: formApiKey, set: setFormApiKey, ph: config.hasApiKey ? '••••••••（已保存）' : '你的登录码', type: 'password' },
-              { label: '模型', val: formModel, set: setFormModel, ph: 'gpt-4o', type: 'text' },
-              { label: '企业微信 Webhook（选填）', val: formWebhook, set: setFormWebhook, ph: 'https://qyapi.weixin.qq.com/...', type: 'text' },
-            ].map(field => (
-              <div key={field.label} style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{field.label}</label>
-                <input
-                  type={field.type}
-                  value={field.val}
-                  onChange={e => field.set(e.target.value)}
-                  placeholder={field.ph}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg)', outline: 'none', fontFamily: 'var(--font-sans)', transition: 'border-color 0.15s' }}
-                  onFocus={e => e.target.style.borderColor = 'var(--text-muted)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--border-strong)'}
-                />
-              </div>
-            ))}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>企业微信机器人 Webhook（选填）</label>
+              <input
+                type="text"
+                value={formWebhook}
+                onChange={e => setFormWebhook(e.target.value)}
+                placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg)', outline: 'none', fontFamily: 'var(--font-sans)', transition: 'border-color 0.15s' }}
+                onFocus={e => e.target.style.borderColor = 'var(--text-muted)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border-strong)'}
+              />
+            </div>
 
             <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
-              配置保存在服务端，检测由 Railway Cron 按设定间隔自动运行，无需保持页面开启。
+              填写后，每次检测到异常会自动发送企业微信群通知。检测由服务端直接发起，无需 AI，更准确。
             </p>
 
             <div style={{ display: 'flex', gap: 8 }}>

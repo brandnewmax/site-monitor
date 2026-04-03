@@ -1,20 +1,14 @@
 export const dynamic = 'force-dynamic'
 
-import { getSites, saveSites, getConfig } from '@/lib/kv'
-import { checkSiteUrl, sendWechatAlert } from '@/lib/checker'
+import { getSites, saveSites } from '@/lib/kv'
+import { checkSiteUrl } from '@/lib/checker'
 
-// Manual check triggered from the frontend for a single site
 export async function POST(req) {
   try {
     const { url } = await req.json()
     if (!url) return Response.json({ error: '缺少 url 参数' }, { status: 400 })
 
-    const config = await getConfig()
-    if (!config.apiKey || !config.baseUrl || !config.model) {
-      return Response.json({ error: '请先在设置中填写 API 配置' }, { status: 400 })
-    }
-
-    const result = await checkSiteUrl(url, config)
+    const result = await checkSiteUrl(url, {})
 
     // Persist result back to Redis
     const sites = await getSites()
@@ -27,10 +21,6 @@ export async function POST(req) {
       sites[idx].note = result.note
       sites[idx].lastCheck = Date.now()
       await saveSites(sites)
-    }
-
-    if (!result.ok && config.webhookUrl) {
-      sendWechatAlert(config.webhookUrl, url, result.status_code, result.note).catch(() => {})
     }
 
     return Response.json({ ...result, checked_at: Date.now() })
