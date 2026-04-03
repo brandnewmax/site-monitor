@@ -4,12 +4,10 @@ import { getSites, saveSites, getConfig } from '@/lib/kv'
 import { checkSiteUrl, sendWechatAlert } from '@/lib/checker'
 
 // Cron runs every 5 minutes (*/5 * * * *)
-// Each call checks exactly ONE site based on current time slot
+// Each call checks ALL sites that are "due" in this 5-minute window
 //
 // Per-site interval = 1800s / total sites
-// Example: 10 sites → each site checked every 180s (3 min)
-//          5 sites  → each site checked every 360s (6 min)
-//          1 site   → checked every 30 min (capped at 1800s)
+// Sites due = those whose slot falls within [now-300s, now]
 
 export async function GET(req) {
   const authHeader = req.headers.get('authorization')
@@ -29,45 +27,63 @@ export async function GET(req) {
     return Response.json({ message: '没有监控网站', checked: 0 })
   }
 
-  const CYCLE_SECONDS = 1800 // fixed 30-minute cycle
+  const CYCLE_SECONDS = 1800
+  const CRON_WINDOW = 300 // cron fires every 5 min = 300s
   const perSiteSeconds = Math.max(10, Math.floor(CYCLE_SECONDS / sites.length))
   const nowSeconds = Math.floor(Date.now() / 1000)
 
-  // Which site slot are we in right now?
-  const slotIndex = Math.floor(nowSeconds / perSiteSeconds) % sites.length
-  const site = sites[slotIndex]
+  // Find all site indices whose time slot falls in this cron window
+  const currentSlot = Math.floor(nowSeconds / perSiteSeconds)
+  const windowSlots = Math.max(1, Math.floor(CRON_WINDOW / perSiteSeconds))
 
-  try {
-    const result = await checkSiteUrl(site.url, config)
-    const entry = {
-      time: Date.now(),
-      code: result.status_code,
-      ok: result.ok,
-      note: result.note,
-    }
-    sites[slotIndex].history = [entry, ...(site.history || [])].slice(0, 10)
-    sites[slotIndex].status = result.ok ? 'ok' : 'err'
-    sites[slotIndex].code = result.status_code
-    sites[slotIndex].note = result.note
-    sites[slotIndex].lastCheck = Date.now()
-
-    if (!result.ok && config.webhookUrl) {
-      await sendWechatAlert(config.webhookUrl, site.url, result.status_code, result.note)
-    }
-
-    await saveSites(sites)
-
-    return Response.json({
-      message: '检测完成',
-      checked_index: slotIndex,
-      checked_url: site.url,
-      ok: result.ok,
-      code: result.status_code,
-      per_site_interval_seconds: perSiteSeconds,
-      total_sites: sites.length,
-      time: new Date().toISOString(),
-    })
-  } catch (err) {
-    return Response.json({ error: err.message, url: site.url }, { status: 500 })
+  // Collect unique site indices due in this window
+  const dueIndices = new Set()
+  for (let i = 0; i < windowSlots; i++) {
+    dueIndices.add((currentSlot - i) % sites.length)
   }
+  // Always include at least the current slot
+  dueIndices.add(currentSlot % sites.length)
+
+  const dueList = [...dueIndices]
+  const results = []
+
+  // Check each due site serially
+  for (const idx of dueList) {
+    const site = sites[idx]
+    if (!site) continue
+
+    try {
+      const result = await checkSiteUrl(site.url, config)
+      const entry = { time: Date.now(), code: result.status_code, ok: result.ok, note: result.note }
+      sites[idx].history = [entry, ...(site.history || [])].slice(0, 10)
+      sites[idx].status = result.ok ? 'ok' : 'err'
+      sites[idx].code = result.status_code
+      sites[idx].note = result.note
+      sites[idx].lastCheck = Date.now()
+
+      if (!result.ok && config.webhookUrl) {
+        await sendWechatAlert(config.webhookUrl, site.url, result.status_code, result.note)
+      }
+
+      results.push({ url: site.url, ok: result.ok, code: result.status_code })
+    } catch (err) {
+      results.push({ url: site.url, ok: false, error: err.message })
+    }
+
+    // Small gap between sites to avoid rate limiting
+    if (dueList.indexOf(idx) < dueList.length - 1) {
+      await new Promise(r => setTimeout(r, 1500))
+    }
+  }
+
+  await saveSites(sites)
+
+  return Response.json({
+    message: '检测完成',
+    checked: results.length,
+    per_site_interval_seconds: perSiteSeconds,
+    total_sites: sites.length,
+    results,
+    time: new Date().toISOString(),
+  })
 }
