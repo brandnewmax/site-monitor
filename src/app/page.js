@@ -2,15 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
-const INTERVAL_OPTIONS = [
-  { label: '15 分钟', value: 15 },
-  { label: '30 分钟', value: 30 },
-  { label: '1 小时', value: 60 },
-  { label: '2 小时', value: 120 },
-  { label: '3 小时', value: 180 },
-  { label: '6 小时', value: 360 },
-]
-
 function getDomain(url) {
   try { return new URL(url).hostname } catch { return url }
 }
@@ -26,7 +17,7 @@ function formatTime(ts) {
 
 export default function Home() {
   const [sites, setSites] = useState([])
-  const [config, setConfig] = useState({ baseUrl: '', model: '', webhookUrl: '', intervalMin: 30, hasApiKey: false })
+  const [config, setConfig] = useState({ baseUrl: '', model: '', webhookUrl: '', hasApiKey: false })
   const [urlInput, setUrlInput] = useState('')
   const [inputFocused, setInputFocused] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -39,7 +30,6 @@ export default function Home() {
   const [formApiKey, setFormApiKey] = useState('')
   const [formModel, setFormModel] = useState('')
   const [formWebhook, setFormWebhook] = useState('')
-  const [formInterval, setFormInterval] = useState(30)
 
   const fetchSites = useCallback(async () => {
     try {
@@ -57,7 +47,6 @@ export default function Home() {
       setFormBaseUrl(data.baseUrl || '')
       setFormModel(data.model || '')
       setFormWebhook(data.webhookUrl || '')
-      setFormInterval(data.intervalMin || 30)
     } catch {}
   }, [])
 
@@ -140,7 +129,6 @@ export default function Home() {
           apiKey: formApiKey || undefined,
           model: formModel,
           webhookUrl: formWebhook,
-          intervalMin: formInterval,
         }),
       })
       setSettingsSaved(true)
@@ -241,20 +229,13 @@ export default function Home() {
           </div>
           <div style={{ borderTop: '1px solid var(--border)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>检测间隔</span>
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {INTERVAL_OPTIONS.map(o => (
-                <button
-                  key={o.value}
-                  onClick={async () => {
-                    setConfig(c => ({ ...c, intervalMin: o.value }))
-                    await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ intervalMin: o.value }) })
-                  }}
-                  style={{ padding: '3px 10px', fontSize: 12, border: '1px solid', borderColor: config.intervalMin === o.value ? 'var(--border-strong)' : 'var(--border)', borderRadius: 20, cursor: 'pointer', transition: 'all 0.15s', background: config.intervalMin === o.value ? 'var(--accent)' : 'transparent', color: config.intervalMin === o.value ? 'white' : 'var(--text-secondary)', fontFamily: 'var(--font-sans)' }}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
+            {sites.length > 0 ? (
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: 20, padding: '3px 10px' }}>
+                每个网站约30分钟 / {sites.length} = 约 {Math.round(1800 / sites.length)} 秒检测一次
+              </span>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>添加网站后自动计算</span>
+            )}
             {sites.length > 0 && (
               <button
                 onClick={checkAllSites}
