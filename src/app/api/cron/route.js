@@ -2,8 +2,9 @@ export const dynamic = 'force-dynamic'
 
 import { getSites, saveSites, getConfig } from '@/lib/kv'
 import { checkSiteUrl, sendWechatAlert } from '@/lib/checker'
+import { cacheDelete } from '@/lib/cache'
 
-const CONCURRENCY = 2 // parallel checks, safe for most servers
+const CONCURRENCY = 2
 
 async function runWithConcurrency(tasks, limit) {
   const results = []
@@ -13,9 +14,7 @@ async function runWithConcurrency(tasks, limit) {
     const p = task().then(r => { executing.delete(p); return r })
     executing.add(p)
     results.push(p)
-    if (executing.size >= limit) {
-      await Promise.race(executing)
-    }
+    if (executing.size >= limit) await Promise.race(executing)
   }
 
   return Promise.all(results)
@@ -29,13 +28,12 @@ export async function GET(req) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Read from Redis directly (cron is the source of truth writer)
   const [config, sites] = await Promise.all([getConfig(), getSites()])
 
   if (sites.length === 0) {
     return Response.json({ message: '没有监控网站', checked: 0 })
   }
-
-  const results = []
 
   const tasks = sites.map((site, idx) => async () => {
     try {
@@ -57,10 +55,10 @@ export async function GET(req) {
     }
   })
 
-  const allResults = await runWithConcurrency(tasks, CONCURRENCY)
-  results.push(...allResults)
+  const results = await runWithConcurrency(tasks, CONCURRENCY)
 
   await saveSites(sites)
+  cacheDelete('sites') // invalidate so next frontend fetch gets fresh data
 
   return Response.json({
     message: '检测完成',

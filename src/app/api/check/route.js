@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { getSites, saveSites } from '@/lib/kv'
 import { checkSiteUrl } from '@/lib/checker'
+import { cacheDelete } from '@/lib/cache'
 
 export async function POST(req) {
   try {
@@ -10,7 +11,6 @@ export async function POST(req) {
 
     const result = await checkSiteUrl(url, {})
 
-    // Persist result back to Redis
     const sites = await getSites()
     const idx = sites.findIndex(s => s.url === url)
     if (idx !== -1) {
@@ -21,6 +21,7 @@ export async function POST(req) {
       sites[idx].note = result.note
       sites[idx].lastCheck = Date.now()
       await saveSites(sites)
+      cacheDelete('sites') // invalidate cache after write
     }
 
     return Response.json({ ...result, checked_at: Date.now() })

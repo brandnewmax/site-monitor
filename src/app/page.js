@@ -53,7 +53,7 @@ export default function Home() {
 
   useEffect(() => {
     Promise.all([fetchSites(), fetchConfig()]).finally(() => setLoading(false))
-    const poll = setInterval(fetchSites, 30000)
+    const poll = setInterval(fetchSites, 900000) // 15 min, same as cron
     return () => clearInterval(poll)
   }, [fetchSites, fetchConfig])
 
