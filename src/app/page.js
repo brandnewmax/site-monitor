@@ -15,18 +15,24 @@ function formatTime(ts) {
   return new Date(ts).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
+function normalizeUrl(raw) {
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  return trimmed.startsWith('http') ? trimmed : 'https://' + trimmed
+}
+
 export default function Home() {
   const [sites, setSites] = useState([])
-  const [config, setConfig] = useState({ webhookUrl: '', hasApiKey: false })
+  const [config, setConfig] = useState({ webhookUrl: '' })
   const [urlInput, setUrlInput] = useState('')
   const [inputFocused, setInputFocused] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [loading, setLoading] = useState(true)
   const [checkingUrls, setCheckingUrls] = useState(new Set())
-
-  // Form state (separate so we don't mutate config until save)
   const [formWebhook, setFormWebhook] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filter, setFilter] = useState('all') // 'all' | 'ok' | 'err'
 
   const fetchSites = useCallback(async () => {
     try {
@@ -47,15 +53,18 @@ export default function Home() {
 
   useEffect(() => {
     Promise.all([fetchSites(), fetchConfig()]).finally(() => setLoading(false))
-    // Poll every 30s to get fresh data from server
     const poll = setInterval(fetchSites, 30000)
     return () => clearInterval(poll)
   }, [fetchSites, fetchConfig])
 
+  // Derived: does this URL already exist?
+  const normalizedInput = normalizeUrl(urlInput)
+  const alreadyExists = normalizedInput !== '' && sites.some(s => s.url === normalizedInput)
+  const canAdd = normalizedInput !== '' && !alreadyExists
+
   async function addSite() {
-    let url = urlInput.trim()
-    if (!url) return
-    if (!url.startsWith('http')) url = 'https://' + url
+    if (!canAdd) return
+    const url = normalizedInput
     setUrlInput('')
     try {
       const res = await fetch('/api/sites', {
@@ -65,7 +74,6 @@ export default function Home() {
       })
       if (res.ok) {
         await fetchSites()
-        // Immediately trigger a manual check for the new site
         checkOneSite(url)
       }
     } catch {}
@@ -119,9 +127,7 @@ export default function Home() {
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          webhookUrl: formWebhook,
-        }),
+        body: JSON.stringify({ webhookUrl: formWebhook }),
       })
       setSettingsSaved(true)
       await fetchConfig()
@@ -131,6 +137,14 @@ export default function Home() {
 
   const totalOk = sites.filter(s => s.status === 'ok').length
   const totalErr = sites.filter(s => s.status === 'err').length
+
+  // Filter + search
+  const visibleSites = sites.filter(s => {
+    const matchFilter = filter === 'all' || (filter === 'ok' && s.status === 'ok') || (filter === 'err' && s.status === 'err')
+    const q = searchQuery.trim().toLowerCase()
+    const matchSearch = !q || s.url.toLowerCase().includes(q) || getDomain(s.url).toLowerCase().includes(q)
+    return matchFilter && matchSearch
+  })
 
   if (loading) {
     return (
@@ -180,17 +194,30 @@ export default function Home() {
 
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '24px 20px' }}>
 
-        {/* Stats */}
+        {/* Stats — clickable filter */}
         {sites.length > 0 && (
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
             {[
-              { label: '正常', value: totalOk, color: 'var(--ok)', bg: 'var(--ok-bg)' },
-              { label: '异常', value: totalErr, color: 'var(--err)', bg: 'var(--err-bg)' },
-              { label: '总计', value: sites.length, color: 'var(--text-secondary)', bg: 'var(--surface)' },
+              { key: 'ok',  label: '正常', value: totalOk,      color: 'var(--ok)',             bg: 'var(--ok-bg)' },
+              { key: 'err', label: '异常', value: totalErr,     color: 'var(--err)',            bg: 'var(--err-bg)' },
+              { key: 'all', label: '总计', value: sites.length, color: 'var(--text-secondary)', bg: 'var(--surface)' },
             ].map(s => (
-              <div key={s.label} style={{ flex: 1, background: s.bg, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
+              <div
+                key={s.key}
+                onClick={() => setFilter(f => f === s.key ? 'all' : s.key)}
+                style={{
+                  flex: 1, background: s.bg, border: `1px solid ${filter === s.key ? s.color : 'var(--border)'}`,
+                  borderRadius: 'var(--radius-md)', padding: '10px 14px', cursor: 'pointer',
+                  transition: 'all 0.15s', outline: filter === s.key ? `2px solid ${s.color}` : 'none', outlineOffset: 1,
+                }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = s.color}
+                onMouseLeave={e => e.currentTarget.style.borderColor = filter === s.key ? s.color : 'var(--border)'}
+              >
                 <div style={{ fontSize: 22, fontWeight: 500, color: s.color, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{s.value}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{s.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {s.label}
+                  {filter === s.key && s.key !== 'all' && <span style={{ fontSize: 9, background: s.color, color: 'white', borderRadius: 3, padding: '1px 4px' }}>筛选中</span>}
+                </div>
               </div>
             ))}
           </div>
@@ -213,21 +240,25 @@ export default function Home() {
             />
             <button
               onClick={addSite}
-              disabled={!urlInput.trim()}
-              style={{ padding: '8px 16px', background: urlInput.trim() ? 'var(--accent)' : 'var(--border)', color: urlInput.trim() ? 'white' : 'var(--text-muted)', border: 'none', borderRadius: 'var(--radius-md)', cursor: urlInput.trim() ? 'pointer' : 'default', fontSize: 13, fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap', fontFamily: 'var(--font-sans)' }}
+              disabled={!canAdd}
+              title={alreadyExists ? '该网站已存在' : ''}
+              style={{
+                padding: '8px 16px',
+                background: alreadyExists ? 'var(--err-bg)' : canAdd ? 'var(--accent)' : 'var(--border)',
+                color: alreadyExists ? 'var(--err)' : canAdd ? 'white' : 'var(--text-muted)',
+                border: alreadyExists ? '1px solid var(--err)' : 'none',
+                borderRadius: 'var(--radius-md)', cursor: canAdd ? 'pointer' : 'default',
+                fontSize: 13, fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap', fontFamily: 'var(--font-sans)',
+              }}
             >
-              添加
+              {alreadyExists ? '已存在' : '添加'}
             </button>
           </div>
           <div style={{ borderTop: '1px solid var(--border)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>检测间隔</span>
-            {sites.length > 0 ? (
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: 20, padding: '3px 10px' }}>
-                每个网站约30分钟 / {sites.length} = 约 {Math.round(1800 / sites.length)} 秒检测一次
-              </span>
-            ) : (
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>添加网站后自动计算</span>
-            )}
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: 20, padding: '3px 10px' }}>
+              每 30 分钟检测一次
+            </span>
             {sites.length > 0 && (
               <button
                 onClick={checkAllSites}
@@ -245,7 +276,23 @@ export default function Home() {
           </div>
         </div>
 
-
+        {/* Search bar — only show when there are sites */}
+        {sites.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', marginBottom: 12 }}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="var(--text-muted)" strokeWidth="1.4" style={{ flexShrink: 0 }}>
+              <circle cx="5.5" cy="5.5" r="4"/><path d="M9 9l2.5 2.5" strokeLinecap="round"/>
+            </svg>
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder={`搜索 ${sites.length} 个网站...`}
+              style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: 'var(--text-primary)', fontFamily: 'var(--font-sans)' }}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+            )}
+          </div>
+        )}
 
         {/* Site list */}
         {sites.length === 0 ? (
@@ -253,9 +300,14 @@ export default function Home() {
             <div style={{ marginBottom: 8, fontSize: 32 }}>◎</div>
             <div>输入网站地址开始监控</div>
           </div>
+        ) : visibleSites.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)', fontSize: 14 }}>
+            <div style={{ marginBottom: 6 }}>没有找到匹配的网站</div>
+            <button onClick={() => { setSearchQuery(''); setFilter('all') }} style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '4px 12px', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>清除筛选</button>
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {sites.map(site => (
+            {visibleSites.map(site => (
               <SiteRow
                 key={site.url}
                 site={site}
@@ -264,6 +316,11 @@ export default function Home() {
                 onRemove={() => removeSite(site.url)}
               />
             ))}
+            {(searchQuery || filter !== 'all') && (
+              <div style={{ textAlign: 'center', padding: '8px', fontSize: 12, color: 'var(--text-muted)' }}>
+                显示 {visibleSites.length} / {sites.length} 个网站
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -278,7 +335,6 @@ export default function Home() {
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 2l8 8M10 2l-8 8"/></svg>
               </button>
             </div>
-
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>企业微信机器人 Webhook（选填）</label>
               <input
@@ -291,11 +347,9 @@ export default function Home() {
                 onBlur={e => e.target.style.borderColor = 'var(--border-strong)'}
               />
             </div>
-
             <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
               填写后，每次检测到异常会自动发送企业微信群通知。检测由服务端直接发起，无需 AI，更准确。
             </p>
-
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={saveSettings} style={{ flex: 1, padding: 10, background: settingsSaved ? 'var(--ok-bg)' : 'var(--accent)', color: settingsSaved ? 'var(--ok)' : 'white', border: settingsSaved ? '1px solid var(--ok)' : 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 14, fontWeight: 500, transition: 'all 0.2s', fontFamily: 'var(--font-sans)' }}>
                 {settingsSaved ? '已保存 ✓' : '保存'}
