@@ -161,7 +161,7 @@ export default function Home() {
       <header style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface)', position: 'sticky', top: 0, zIndex: 10 }}>
         <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 20px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(217,119,87,0.35)' }}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <circle cx="4" cy="4" r="2.5" fill="white" opacity="0.9"/>
                 <circle cx="10" cy="4" r="2.5" fill="white" opacity="0.6"/>
@@ -224,7 +224,7 @@ export default function Home() {
         )}
 
         {/* Add input */}
-        <div style={{ background: inputFocused ? 'var(--surface)' : 'var(--accent)', border: inputFocused ? '1px solid var(--border-strong)' : '1px solid transparent', borderRadius: 'var(--radius-lg)', boxShadow: inputFocused ? 'var(--shadow-md)' : 'var(--shadow-sm)', transition: 'all 0.2s', marginBottom: 12, overflow: 'hidden' }}>
+        <div style={{ background: inputFocused ? 'var(--surface)' : 'var(--accent)', border: inputFocused ? '1px solid var(--border-strong)' : '1px solid transparent', borderRadius: 'var(--radius-lg)', boxShadow: inputFocused ? 'var(--shadow-md)' : '0 2px 12px rgba(217,119,87,0.25)', transition: 'all 0.2s', marginBottom: 12, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', padding: '4px 4px 4px 16px', gap: 8 }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke={inputFocused ? 'var(--text-muted)' : 'rgba(255,255,255,0.7)'} strokeWidth="1.6" style={{ flexShrink: 0 }}>
               <path d="M7 2v10M2 7h10" strokeLinecap="round"/>

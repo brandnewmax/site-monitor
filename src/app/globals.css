@@ -21,7 +21,7 @@
   --err-dot: #c13b4e;
   --checking: #1a5fa8;
   --checking-bg: #f0f5fc;
-  --accent: #1a1915;
+  --accent: #D97757;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -51,7 +51,7 @@
     --err-dot: #e07080;
     --checking: #6fa8dc;
     --checking-bg: #0d1f35;
-    --accent: #f0ede8;
+    --accent: #D97757;
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
     --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
@@ -82,7 +82,7 @@ body {
 }
 
 @keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(155,35,53,0.3); }
-  70% { box-shadow: 0 0 0 6px rgba(155,35,53,0); }
-  100% { box-shadow: 0 0 0 0 rgba(155,35,53,0); }
+  0% { box-shadow: 0 0 0 0 rgba(217,119,87,0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(217,119,87,0); }
+  100% { box-shadow: 0 0 0 0 rgba(217,119,87,0); }
 }
