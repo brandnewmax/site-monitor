@@ -224,10 +224,10 @@ export default function Home() {
         )}
 
         {/* Add input */}
-        <div style={{ background: 'var(--surface)', border: inputFocused ? '1px solid var(--border-strong)' : '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: inputFocused ? 'var(--shadow-md)' : 'var(--shadow-sm)', transition: 'all 0.2s', marginBottom: 12, overflow: 'hidden' }}>
+        <div style={{ background: inputFocused ? 'var(--surface)' : 'var(--accent)', border: inputFocused ? '1px solid var(--border-strong)' : '1px solid transparent', borderRadius: 'var(--radius-lg)', boxShadow: inputFocused ? 'var(--shadow-md)' : 'var(--shadow-sm)', transition: 'all 0.2s', marginBottom: 12, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', padding: '4px 4px 4px 16px', gap: 8 }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--text-muted)" strokeWidth="1.4" style={{ flexShrink: 0 }}>
-              <circle cx="6" cy="6" r="4.5"/><path d="M10 10l2.5 2.5" strokeLinecap="round"/>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke={inputFocused ? 'var(--text-muted)' : 'rgba(255,255,255,0.7)'} strokeWidth="1.6" style={{ flexShrink: 0 }}>
+              <path d="M7 2v10M2 7h10" strokeLinecap="round"/>
             </svg>
             <input
               value={urlInput}
@@ -236,7 +236,7 @@ export default function Home() {
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder="添加网站地址，如 example.com"
-              style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: 'var(--text-primary)', padding: '10px 0', fontFamily: 'var(--font-sans)' }}
+              style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: inputFocused ? 'var(--text-primary)' : 'white', padding: '10px 0', fontFamily: 'var(--font-sans)' }}
             />
             <button
               onClick={addSite}
@@ -244,9 +244,9 @@ export default function Home() {
               title={alreadyExists ? '该网站已存在' : ''}
               style={{
                 padding: '8px 16px',
-                background: alreadyExists ? 'var(--err-bg)' : canAdd ? 'var(--accent)' : 'var(--border)',
-                color: alreadyExists ? 'var(--err)' : canAdd ? 'white' : 'var(--text-muted)',
-                border: alreadyExists ? '1px solid var(--err)' : 'none',
+                background: alreadyExists ? 'var(--err-bg)' : inputFocused ? 'var(--accent)' : 'rgba(255,255,255,0.2)',
+                color: alreadyExists ? 'var(--err)' : 'white',
+                border: alreadyExists ? '1px solid var(--err)' : inputFocused ? 'none' : '1px solid rgba(255,255,255,0.3)',
                 borderRadius: 'var(--radius-md)', cursor: canAdd ? 'pointer' : 'default',
                 fontSize: 13, fontWeight: 500, transition: 'all 0.15s', whiteSpace: 'nowrap', fontFamily: 'var(--font-sans)',
               }}
@@ -254,17 +254,17 @@ export default function Home() {
               {alreadyExists ? '已存在' : '添加'}
             </button>
           </div>
-          <div style={{ borderTop: '1px solid var(--border)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>检测间隔</span>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: 20, padding: '3px 10px' }}>
+          <div style={{ borderTop: inputFocused ? '1px solid var(--border)' : '1px solid rgba(255,255,255,0.15)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: inputFocused ? 'var(--text-muted)' : 'rgba(255,255,255,0.6)' }}>检测间隔</span>
+            <span style={{ fontSize: 12, color: inputFocused ? 'var(--text-secondary)' : 'rgba(255,255,255,0.9)', background: inputFocused ? 'var(--surface-hover)' : 'rgba(255,255,255,0.15)', border: inputFocused ? '1px solid var(--border)' : '1px solid rgba(255,255,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
               每 30 分钟检测一次
             </span>
             {sites.length > 0 && (
               <button
                 onClick={checkAllSites}
-                style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', fontSize: 12, border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', background: 'transparent', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.color = 'var(--text-primary)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', fontSize: 12, border: inputFocused ? '1px solid var(--border)' : '1px solid rgba(255,255,255,0.25)', borderRadius: 20, cursor: 'pointer', background: 'transparent', color: inputFocused ? 'var(--text-secondary)' : 'rgba(255,255,255,0.8)', fontFamily: 'var(--font-sans)' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = inputFocused ? 'var(--border-strong)' : 'white'; e.currentTarget.style.color = inputFocused ? 'var(--text-primary)' : 'white' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = inputFocused ? 'var(--border)' : 'rgba(255,255,255,0.25)'; e.currentTarget.style.color = inputFocused ? 'var(--text-secondary)' : 'rgba(255,255,255,0.8)' }}
               >
                 <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M9.5 5.5A4 4 0 1 1 8 2.2" strokeLinecap="round"/>
