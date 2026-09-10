@@ -1,4 +1,5 @@
 // Pure server-side fetch checker — no AI, faster and more reliable
+// 从 lib/checker.js 平移，仅去掉未使用的 config 参数
 
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -24,13 +25,16 @@ function describeStatus(code, cfProtected) {
   if (code === 502) return '502 网关错误'
   if (code === 503) return '503 服务暂时不可用'
   if (code === 504) return '504 网关超时'
+  // Workers 上 fetch 一个解析不了的域名不会抛异常，而是由边缘返回 530。
+  // 不改的话会被下面的兜底归成「服务器错误」，与实际情况不符。
+  if (code === 530) return '530 域名解析失败（Cloudflare 无法解析该域名）'
   if (code >= 300 && code < 400) return `${code} 重定向`
   if (code >= 400 && code < 500) return `${code} 客户端错误`
   if (code >= 500) return `${code} 服务器错误`
   return `HTTP ${code}`
 }
 
-function isCloudflareResponse(headers, body) {
+function isCloudflareResponse(headers) {
   const server = headers.get('server') || ''
   const cfRay = headers.get('cf-ray') || ''
   return server.toLowerCase().includes('cloudflare') || cfRay !== ''
@@ -49,7 +53,6 @@ async function attemptFetch(url, timeoutMs = 15000) {
         'User-Agent': randomUA(),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',
       },
@@ -58,11 +61,10 @@ async function attemptFetch(url, timeoutMs = 15000) {
     clearTimeout(timeoutId)
 
     const code = res.status
-    const cfProtected = isCloudflareResponse(res.headers, '')
+    const cfProtected = isCloudflareResponse(res.headers)
 
     // Cloudflare special handling:
     // 403 from Cloudflare = site is up but blocking our IP, treat as WARNING not ERROR
-    // 503 from Cloudflare = site may be truly down
     let ok = code >= 200 && code < 300
     let warning = false
 
@@ -96,7 +98,7 @@ async function attemptFetch(url, timeoutMs = 15000) {
 }
 
 // Main export: fetch with retry on failure
-export async function checkSiteUrl(url, config, maxRetries = 2) {
+export async function checkSiteUrl(url, maxRetries = 2) {
   let lastResult = null
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -140,3 +142,6 @@ export async function sendWechatAlert(webhookUrl, siteUrl, statusCode, note) {
     })
   } catch {}
 }
+
+// 注：上面用的 toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) 已在本机
+// wrangler dev（workerd 运行时）实测通过，ICU 数据覆盖 Asia/Shanghai，输出与迁移前一致。

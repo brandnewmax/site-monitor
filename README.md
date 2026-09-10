@@ -1,42 +1,108 @@
 # 网站监控工具
 
-服务端持续监控网站可用性，无需保持页面开启。通过 Railway Cron 每分钟触发，智能轮询每个网站，结果存储在 Upstash Redis。
+服务端持续监控网站可用性，无需保持页面开启。跑在 Cloudflare Workers 上，**免费额度内零成本**。
+
+技术栈：单个 Worker（API + cron）+ D1（存储）+ 静态资源（前端）。
 
 ## 检测机制
 
-Cron **每分钟**执行一次，每次只检测**一个**网站（按时间槽轮流），完全无并发。
+Cron **每分钟**触发一次，每次只检测轮转到的 **N 个**网站，完全无并发压力。
 
 ```
-每个网站的检测间隔 = 设定总间隔 ÷ 网站数量
-
-例：30 分钟间隔，10 个网站 → 每个网站每 3 分钟检测一次
-例：30 分钟间隔，100 个网站 → 每个网站每 18 秒检测一次
+每分钟检测数 N = 站点总数 ÷ 检测间隔
 ```
 
-间隔在页面上调整，Cron 的 Schedule 始终是 `* * * * *`（每分钟），不需要改。
+`检测间隔` 指**所有网站轮询一圈的目标时长**，在页面上可调（默认 15 分钟）。
 
-## 部署步骤
+例：
+- 26 个站，间隔 15 分钟 → 每分钟约 1.73 个 → 约 15 分钟轮完一圈
+- 26 个站，间隔 30 分钟 → 每分钟约 0.87 个 → 约 30 分钟轮完一圈
 
-### 1. 创建 Upstash Redis 数据库
-1. 前往 [upstash.com](https://upstash.com) → Create Database → Redis
-2. 复制（URL 必须是 https:// 开头）：
-   - `KV_REST_API_URL` → 填入 `UPSTASH_REDIS_REST_URL`
-   - `KV_REST_API_TOKEN` → 填入 `UPSTASH_REDIS_REST_TOKEN`
+N 保留小数余额逐轮累积，所以实际周期严格贴合设定值，不会被取整悄悄缩短。
+单轮上限 8 个站，用于保护子请求额度（见下）。
 
-### 2. 上传代码到 GitHub 并在 Railway 部署
-在 Railway Variables 里添加：
+### 为什么是轮转而不是每次全查
+
+Workers 免费版限制**单次调用最多 50 个子请求（出站 fetch）**。
+26 个站全查、每站失败重试 1 次，最坏 52 个子请求，会直接超限报错。
+轮转后单轮最坏 16 个，余量充足。
+
+## 免费额度实测余量
+
+以 26 个站、间隔 15 分钟计算：
+
+| 项目 | 用量 | Workers Free 上限 | 余量 |
+|---|---|---|---|
+| 请求 | ~1,440/天 | 100,000/天 | 69× |
+| 子请求 | ≤16/次 | 50/次 | 3× |
+| Cron 单次时长 | 最坏 ~33 秒 | 15 分钟 | 27× |
+| D1 行写入 | ~8,600/天 | 100,000/天 | 11× |
+| Cron 触发器 | 1 个 | 5 个/账号 | — |
+
+注意：**CPU 时间免费版只有 10ms/次**（等待 fetch 的时间不计入，只算实际计算）。
+这是没有采用 Next.js / SSR 方案的原因——官方文档明确 SSR 类负载单次吃 10–20ms。
+
+## 部署
+
+```bash
+npm install
+npm run migrate:remote   # 首次：建表 + 导入数据
+npm run deploy           # 打包前端 + 部署 Worker
 ```
-UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
-UPSTASH_REDIS_REST_TOKEN=AXxxxxxxxxxxxxxxxx
-CRON_SECRET=任意一段随机字符串
+
+首次部署还需要设置手动触发用的密钥：
+
+```bash
+wrangler secret put CRON_SECRET
 ```
 
-### 3. 设置 Railway Cron Job
-- **Schedule**：`* * * * *`（每分钟，固定不变）
-- **Command**：
-```
-curl -s -H "Authorization: Bearer 你的CRON_SECRET" https://你的railway域名/api/cron
-```
+Cron 触发器由 `wrangler.toml` 的 `[triggers] crons = ["* * * * *"]` 声明，无需在控制台配置。
 
-### 4. 打开页面完成配置
-访问 Railway 域名 → 点「设置」→ 填写 API Base URL、登录码、模型、企业微信 Webhook。
+## 数据
+
+三张表（见 `migrations/0001_init.sql`）：
+
+- `sites` — 站点列表与最新状态，`rowid` 即轮转顺序
+- `history` — 检测历史，每站只保留最近 10 条（写入时自动裁剪）
+- `kv` — 配置（`webhookUrl` / `intervalMin`）与轮转状态（`cursor` / `acc`）
+
+## 接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/sites` | 站点列表，含每站最近 10 条历史 |
+| POST | `/api/sites` | 添加站点 |
+| DELETE | `/api/sites` | 移除站点 |
+| GET | `/api/config` | 读取配置 |
+| POST | `/api/config` | 保存配置 |
+| POST | `/api/check` | 手动检测单个站点 |
+| GET | `/api/cron` | 手动触发一轮检测（需 `CRON_SECRET`） |
+
+## 鉴权
+
+在页面「设置」里填写**登录码**后，除 `/api/cron` 外的所有接口都要求请求头
+`x-login-code` 匹配，否则返回 401。前端会自动弹出登录界面，登录码存在
+浏览器 localStorage。
+
+**未设置登录码时不启用鉴权**——这样不会因为忘记码把自己锁在门外。
+`/api/cron` 始终走 `CRON_SECRET`，不受登录码影响。
+
+登录码以明文存于 D1，仅用于防止误操作和普通扫描，不是强身份认证。
+
+## 告警
+
+在页面「设置」里填企业微信机器人 Webhook，检测到异常时自动推送。
+告警时间使用 `toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })`，
+已在 workerd 运行时实测通过（ICU 数据覆盖 Asia/Shanghai）。
+
+### 关于 DNS 失败
+
+Workers 上 `fetch` 一个解析不了的域名**不会抛异常**，而是由 Cloudflare 边缘返回
+**HTTP 530**。这与在 Node.js 上跑不同（那边会抛 `ENOTFOUND`）。
+`describeStatus` 为此单独把 530 映射成「域名解析失败」，否则会被兜底逻辑
+误归为「服务器错误」。
+
+## 已知事项
+
+- 登录码以明文存在 D1，只是防误操作和普通扫描，**不是强身份认证**。
+- 告警只在**连续重试后仍失败**时发出（每站最多 2 次尝试，间隔 3 秒）。

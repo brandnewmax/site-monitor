@@ -1,0 +1,18 @@
+name = "site-monitor"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# 静态前端。未命中文件的请求（/api/*）会落到 Worker 的 fetch 处理器
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "none"
+
+# 每分钟触发一次，每次只检测轮转到的 N 个站点（见 src/index.js）
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "site-monitor"
+database_id = "73b10544-9ea3-4e96-87bc-d3c716e4effa"
