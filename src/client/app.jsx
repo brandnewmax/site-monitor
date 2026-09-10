@@ -1,6 +1,7 @@
-'use client'
+// 从 src/app/page.js 平移。相对原文件只有三处改动，均在下方以 [改动] 标出
 
 import { useState, useEffect, useCallback } from 'react'
+import { createRoot } from 'react-dom/client'
 
 function getDomain(url) {
   try { return new URL(url).hostname } catch { return url }
@@ -21,7 +22,7 @@ function normalizeUrl(raw) {
   return trimmed.startsWith('http') ? trimmed : 'https://' + trimmed
 }
 
-export default function Home() {
+function Home() {
   const [sites, setSites] = useState([])
   const [config, setConfig] = useState({ webhookUrl: '' })
   const [urlInput, setUrlInput] = useState('')
@@ -31,6 +32,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [checkingUrls, setCheckingUrls] = useState(new Set())
   const [formWebhook, setFormWebhook] = useState('')
+  const [formInterval, setFormInterval] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [filter, setFilter] = useState('all') // 'all' | 'ok' | 'err'
 
@@ -48,12 +50,15 @@ export default function Home() {
       const data = await res.json()
       setConfig(data)
       setFormWebhook(data.webhookUrl || '')
+      setFormInterval(String(data.intervalMin || 15))
     } catch {}
   }, [])
 
   useEffect(() => {
     Promise.all([fetchSites(), fetchConfig()]).finally(() => setLoading(false))
-    const poll = setInterval(fetchSites, 900000) // 15 min, same as cron
+    // [改动 1] 原为 900000（15 分钟，与当时每次全量检测对齐）。
+    // 现在每分钟轮转 2 个站点，轮询改 60 秒才能及时反映错开的更新。
+    const poll = setInterval(fetchSites, 60000)
     return () => clearInterval(poll)
   }, [fetchSites, fetchConfig])
 
@@ -127,7 +132,10 @@ export default function Home() {
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ webhookUrl: formWebhook }),
+        body: JSON.stringify({
+          webhookUrl: formWebhook,
+          intervalMin: Math.max(1, parseInt(formInterval, 10) || 15),
+        }),
       })
       setSettingsSaved(true)
       await fetchConfig()
@@ -263,8 +271,10 @@ export default function Home() {
           </div>
           <div style={{ borderTop: inputFocused ? '1px solid var(--border)' : '1px solid rgba(255,255,255,0.15)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, color: inputFocused ? 'var(--text-muted)' : 'rgba(255,255,255,0.6)' }}>检测间隔</span>
+            {/* [改动 2] 原来硬编码「每 30 分钟检测一次」，与实际行为不符且不可调。
+                现在读 config.intervalMin，也就是轮转一圈的目标时长。 */}
             <span style={{ fontSize: 12, color: inputFocused ? 'var(--text-secondary)' : 'rgba(255,255,255,0.9)', background: inputFocused ? 'var(--surface-hover)' : 'rgba(255,255,255,0.15)', border: inputFocused ? '1px solid var(--border)' : '1px solid rgba(255,255,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
-              每 30 分钟检测一次
+              约 {config.intervalMin || 15} 分钟轮询一遍
             </span>
             {sites.length > 0 && (
               <button
@@ -354,8 +364,23 @@ export default function Home() {
                 onBlur={e => e.target.style.borderColor = 'var(--border-strong)'}
               />
             </div>
+            {/* [改动 3] 新增检测间隔输入。原来这个值只存在于后端配置里、页面无法设置，
+                现在它就是轮转一圈的目标时长。 */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>检测间隔（分钟）</label>
+              <input
+                type="number"
+                min="1"
+                value={formInterval}
+                onChange={e => setFormInterval(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg)', outline: 'none', fontFamily: 'var(--font-sans)', transition: 'border-color 0.15s' }}
+                onFocus={e => e.target.style.borderColor = 'var(--text-muted)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border-strong)'}
+              />
+            </div>
             <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
-              填写后，每次检测到异常会自动发送企业微信群通知。检测由服务端直接发起，无需 AI，更准确。
+              填写 Webhook 后，每次检测到异常会自动发送企业微信群通知。检测由服务端直接发起，无需 AI，更准确。
+              检测间隔是所有网站轮询一圈的目标时长，站点越多，单个网站的检测越稀疏。
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={saveSettings} style={{ flex: 1, padding: 10, background: settingsSaved ? 'var(--ok-bg)' : 'var(--accent)', color: settingsSaved ? 'var(--ok)' : 'white', border: settingsSaved ? '1px solid var(--ok)' : 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 14, fontWeight: 500, transition: 'all 0.2s', fontFamily: 'var(--font-sans)' }}>
@@ -428,3 +453,5 @@ function SiteRow({ site, isChecking, onCheck, onRemove }) {
     </div>
   )
 }
+
+createRoot(document.getElementById('root')).render(<Home />)
