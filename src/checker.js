@@ -25,6 +25,9 @@ function describeStatus(code, cfProtected) {
   if (code === 502) return '502 网关错误'
   if (code === 503) return '503 服务暂时不可用'
   if (code === 504) return '504 网关超时'
+  // Workers 上 fetch 一个解析不了的域名不会抛异常，而是由边缘返回 530。
+  // 不改的话会被下面的兜底归成「服务器错误」，与实际情况不符。
+  if (code === 530) return '530 域名解析失败（Cloudflare 无法解析该域名）'
   if (code >= 300 && code < 400) return `${code} 重定向`
   if (code >= 400 && code < 500) return `${code} 客户端错误`
   if (code >= 500) return `${code} 服务器错误`

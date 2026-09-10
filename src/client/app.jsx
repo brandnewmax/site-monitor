@@ -3,6 +3,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createRoot } from 'react-dom/client'
 
+// [改动 4] 登录码：存 localStorage，随每个 API 请求带上。
+// 后端只在设置了登录码时才校验，所以这里是空字符串也不会影响使用。
+const CODE_KEY = 'sm_login_code'
+let AUTH_CODE = ''
+try { AUTH_CODE = localStorage.getItem(CODE_KEY) || '' } catch {}
+
+const api = (path, options = {}) =>
+  fetch(path, {
+    ...options,
+    headers: { ...(options.headers || {}), 'x-login-code': AUTH_CODE },
+  })
+
 function getDomain(url) {
   try { return new URL(url).hostname } catch { return url }
 }
@@ -35,10 +47,16 @@ function Home() {
   const [formInterval, setFormInterval] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [filter, setFilter] = useState('all') // 'all' | 'ok' | 'err'
+  // [改动 4] 登录相关
+  const [needLogin, setNeedLogin] = useState(false)
+  const [codeInput, setCodeInput] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [formLoginCode, setFormLoginCode] = useState('')
 
   const fetchSites = useCallback(async () => {
     try {
-      const res = await fetch('/api/sites')
+      const res = await api('/api/sites')
+      if (res.status === 401) { setNeedLogin(true); return }
       const data = await res.json()
       if (data.sites) setSites(data.sites)
     } catch {}
@@ -46,7 +64,8 @@ function Home() {
 
   const fetchConfig = useCallback(async () => {
     try {
-      const res = await fetch('/api/config')
+      const res = await api('/api/config')
+      if (res.status === 401) { setNeedLogin(true); return }
       const data = await res.json()
       setConfig(data)
       setFormWebhook(data.webhookUrl || '')
@@ -54,13 +73,35 @@ function Home() {
     } catch {}
   }, [])
 
+  async function submitLogin() {
+    const code = codeInput.trim()
+    if (!code) return
+    AUTH_CODE = code
+    try { localStorage.setItem(CODE_KEY, code) } catch {}
+    // 用一次真实请求校验，通过才放行
+    const res = await api('/api/config').catch(() => null)
+    if (res && res.ok) {
+      setNeedLogin(false)
+      setLoginError('')
+      setCodeInput('')
+      await Promise.all([fetchSites(), fetchConfig()])
+    } else {
+      AUTH_CODE = ''
+      try { localStorage.removeItem(CODE_KEY) } catch {}
+      setLoginError('登录码不正确')
+    }
+  }
+
   useEffect(() => {
+    // 未登录时不轮询，否则会每分钟发一次必然 401 的请求
+    if (needLogin) { setLoading(false); return }
+
     Promise.all([fetchSites(), fetchConfig()]).finally(() => setLoading(false))
     // [改动 1] 原为 900000（15 分钟，与当时每次全量检测对齐）。
     // 现在每分钟轮转 2 个站点，轮询改 60 秒才能及时反映错开的更新。
     const poll = setInterval(fetchSites, 60000)
     return () => clearInterval(poll)
-  }, [fetchSites, fetchConfig])
+  }, [fetchSites, fetchConfig, needLogin])
 
   // Derived: does this URL already exist?
   const normalizedInput = normalizeUrl(urlInput)
@@ -72,7 +113,7 @@ function Home() {
     const url = normalizedInput
     setUrlInput('')
     try {
-      const res = await fetch('/api/sites', {
+      const res = await api('/api/sites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
@@ -86,7 +127,7 @@ function Home() {
 
   async function removeSite(url) {
     try {
-      await fetch('/api/sites', {
+      await api('/api/sites', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
@@ -98,7 +139,7 @@ function Home() {
   async function checkOneSite(url) {
     setCheckingUrls(prev => new Set([...prev, url]))
     try {
-      const res = await fetch('/api/check', {
+      const res = await api('/api/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
@@ -129,14 +170,21 @@ function Home() {
 
   async function saveSettings() {
     try {
-      await fetch('/api/config', {
+      await api('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           webhookUrl: formWebhook,
           intervalMin: Math.max(1, parseInt(formInterval, 10) || 15),
+          // 留空表示不修改；填了则同时更新本地缓存的码
+          loginCode: formLoginCode.trim() || undefined,
         }),
       })
+      if (formLoginCode.trim()) {
+        AUTH_CODE = formLoginCode.trim()
+        try { localStorage.setItem(CODE_KEY, AUTH_CODE) } catch {}
+        setFormLoginCode('')
+      }
       setSettingsSaved(true)
       await fetchConfig()
       setTimeout(() => { setSettingsSaved(false); setShowSettings(false) }, 1000)
@@ -158,6 +206,42 @@ function Home() {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
         <div style={{ width: 20, height: 20, border: '2px solid var(--border-strong)', borderTopColor: 'var(--text-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      </div>
+    )
+  }
+
+  // [改动 4] 后端设置了登录码且本地没有（或已失效）时，先过登录
+  if (needLogin) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 20 }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-xl)', padding: '32px 28px 26px', width: '100%', maxWidth: 360, boxShadow: 'var(--shadow-lg)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <circle cx="4" cy="4" r="2.5" fill="white" opacity="0.9"/>
+                <circle cx="10" cy="4" r="2.5" fill="white" opacity="0.6"/>
+                <circle cx="4" cy="10" r="2.5" fill="white" opacity="0.6"/>
+                <circle cx="10" cy="10" r="2.5" fill="white" opacity="0.3"/>
+              </svg>
+            </div>
+            <span style={{ fontSize: 16, fontWeight: 500 }}>网站监控</span>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 18 }}>请输入登录码</p>
+          <input
+            type="password"
+            value={codeInput}
+            onChange={e => { setCodeInput(e.target.value); setLoginError('') }}
+            onKeyDown={e => e.key === 'Enter' && submitLogin()}
+            autoFocus
+            placeholder="登录码"
+            style={{ width: '100%', padding: '10px 12px', border: `1px solid ${loginError ? 'var(--err)' : 'var(--border-strong)'}`, borderRadius: 'var(--radius-md)', fontSize: 14, color: 'var(--text-primary)', background: 'var(--bg)', outline: 'none', fontFamily: 'var(--font-sans)', marginBottom: loginError ? 8 : 18 }}
+          />
+          {loginError && <p style={{ fontSize: 12, color: 'var(--err)', marginBottom: 12 }}>{loginError}</p>}
+          <button
+            onClick={submitLogin}
+            style={{ width: '100%', padding: 11, background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 14, fontWeight: 500, fontFamily: 'var(--font-sans)' }}
+          >进入</button>
+        </div>
       </div>
     )
   }
@@ -378,9 +462,25 @@ function Home() {
                 onBlur={e => e.target.style.borderColor = 'var(--border-strong)'}
               />
             </div>
+            {/* [改动 4] 登录码。留空 = 不修改。设置后所有接口都要求带码。 */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+                登录码{config.hasLoginCode ? '（已设置，留空则不修改）' : '（留空则不启用鉴权）'}
+              </label>
+              <input
+                type="password"
+                value={formLoginCode}
+                onChange={e => setFormLoginCode(e.target.value)}
+                placeholder={config.hasLoginCode ? '••••••' : '设置后，访问需输入登录码'}
+                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg)', outline: 'none', fontFamily: 'var(--font-sans)', transition: 'border-color 0.15s' }}
+                onFocus={e => e.target.style.borderColor = 'var(--text-muted)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border-strong)'}
+              />
+            </div>
             <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
               填写 Webhook 后，每次检测到异常会自动发送企业微信群通知。检测由服务端直接发起，无需 AI，更准确。
               检测间隔是所有网站轮询一圈的目标时长，站点越多，单个网站的检测越稀疏。
+              登录码设置后需重新输入才能访问；留空则保持当前状态不变。
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={saveSettings} style={{ flex: 1, padding: 10, background: settingsSaved ? 'var(--ok-bg)' : 'var(--accent)', color: settingsSaved ? 'var(--ok)' : 'white', border: settingsSaved ? '1px solid var(--ok)' : 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 14, fontWeight: 500, transition: 'all 0.2s', fontFamily: 'var(--font-sans)' }}>

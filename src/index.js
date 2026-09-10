@@ -14,6 +14,17 @@ const json = (data, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   })
 
+const AUTH_HEADER = 'x-login-code'
+
+// 设置了登录码才启用鉴权；未设置则一切照旧，不会因为忘了码把自己锁在门外。
+// 返回 null 表示放行，否则返回该拒绝的响应。
+async function checkAuth(request, env) {
+  const code = (await db.getConfig(env)).loginCode
+  if (!code) return null
+  if (request.headers.get(AUTH_HEADER) === code) return null
+  return json({ error: '未授权', needLogin: true }, 401)
+}
+
 async function runWithConcurrency(tasks, limit) {
   const results = []
   const executing = new Set()
@@ -118,6 +129,7 @@ async function handleConfig(request, env) {
     return json({
       webhookUrl: config.webhookUrl || '',
       intervalMin: config.intervalMin || DEFAULT_INTERVAL_MIN,
+      hasLoginCode: !!config.loginCode,
     })
   }
 
@@ -127,6 +139,10 @@ async function handleConfig(request, env) {
       webhookUrl: typeof body.webhookUrl === 'string' ? body.webhookUrl : undefined,
       intervalMin: Number.isFinite(body.intervalMin) && body.intervalMin > 0
         ? Math.floor(body.intervalMin)
+        : undefined,
+      // 非空字符串才更新，空字符串表示「不改」，避免误清空导致鉴权失效
+      loginCode: typeof body.loginCode === 'string' && body.loginCode.trim()
+        ? body.loginCode.trim()
         : undefined,
     })
     return json({ ok: true })
@@ -172,10 +188,15 @@ export default {
 
     if (pathname.startsWith('/api/')) {
       try {
+        // /api/cron 自带 CRON_SECRET 鉴权，不走登录码
+        if (pathname === '/api/cron') return await handleCron(request, env)
+
+        const denied = await checkAuth(request, env)
+        if (denied) return denied
+
         if (pathname === '/api/sites') return await handleSites(request, env)
         if (pathname === '/api/config') return await handleConfig(request, env)
         if (pathname === '/api/check') return await handleCheck(request, env)
-        if (pathname === '/api/cron') return await handleCron(request, env)
         return json({ error: 'Not Found' }, 404)
       } catch (err) {
         return json({ error: err.message || '服务器内部错误' }, 500)

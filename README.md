@@ -78,13 +78,31 @@ Cron 触发器由 `wrangler.toml` 的 `[triggers] crons = ["* * * * *"]` 声明�
 | POST | `/api/check` | 手动检测单个站点 |
 | GET | `/api/cron` | 手动触发一轮检测（需 `CRON_SECRET`） |
 
+## 鉴权
+
+在页面「设置」里填写**登录码**后，除 `/api/cron` 外的所有接口都要求请求头
+`x-login-code` 匹配，否则返回 401。前端会自动弹出登录界面，登录码存在
+浏览器 localStorage。
+
+**未设置登录码时不启用鉴权**——这样不会因为忘记码把自己锁在门外。
+`/api/cron` 始终走 `CRON_SECRET`，不受登录码影响。
+
+登录码以明文存于 D1，仅用于防止误操作和普通扫描，不是强身份认证。
+
 ## 告警
 
 在页面「设置」里填企业微信机器人 Webhook，检测到异常时自动推送。
 告警时间使用 `toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })`，
 已在 workerd 运行时实测通过（ICU 数据覆盖 Asia/Shanghai）。
 
+### 关于 DNS 失败
+
+Workers 上 `fetch` 一个解析不了的域名**不会抛异常**，而是由 Cloudflare 边缘返回
+**HTTP 530**。这与在 Node.js 上跑不同（那边会抛 `ENOTFOUND`）。
+`describeStatus` 为此单独把 530 映射成「域名解析失败」，否则会被兜底逻辑
+误归为「服务器错误」。
+
 ## 已知事项
 
-- **接口无鉴权**：任何知道 URL 的人都能增删站点。迁移前就如此，未改动。
+- 登录码以明文存在 D1，只是防误操作和普通扫描，**不是强身份认证**。
 - 告警只在**连续重试后仍失败**时发出（每站最多 2 次尝试，间隔 3 秒）。
